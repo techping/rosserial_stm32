@@ -8,6 +8,8 @@
 #include "stm32f3xx_hal.h"
 #include "stm32f3xx_hal_spi.h"
 #include "mpu9250.h"
+#include "inv_mpu.h"
+#include "inv_mpu_dmp_motion_driver.h"
 #include <mainpp.h>
 #include <queue>
 #include <memory>
@@ -70,12 +72,13 @@ void SPI_Mem_Transmit(void){
   }
 }
 
-void SPI_Mem_Write(unsigned short int chip, uint8_t address, short num, const uint8_t data[]){
+uint8_t SPI_Mem_Write(unsigned short int chip, uint8_t address, short num, const uint8_t data[]){
   spiq.push(std::unique_ptr<SPI_Mem>(new SPI_Mem(chip, address, num, data)));
   SPI_Mem_Transmit();
+  return 1;
 }
 
-void SPI_Mem_Read(unsigned short int chip, uint8_t address, void (*callback)(uint8_t dat[]), short num){
+void SPI_Mem_Read(unsigned short int chip, uint8_t address,  short num, void (*callback)(uint8_t dat[])){
   spiq.push(std::unique_ptr<SPI_Mem>(new SPI_Mem(chip, address | 0x80, callback, num)));
   SPI_Mem_Transmit();
 }
@@ -236,8 +239,10 @@ void build_gyroacc(short *gyro, short *accel_short, unsigned long *timestamp, un
 
 void loop(void)
 {
-  //SPI_Mem_Read(CS_IMU_Pin, WHO_AM_I, cb_whoami, 1);
-  SPI_Mem_Read(CS_IMU_Pin, ACCEL_XOUT_H, cb_sense, 14);
+  //SPI_Mem_Read(CS_IMU_Pin, WHO_AM_I, 1, cb_whoami);
+  SPI_Mem_Read(CS_IMU_Pin, WHO_AM_I, 1, [](uint8_t dat[]){ uint8_t tmp = dat[0]; });
+
+  SPI_Mem_Read(CS_IMU_Pin, ACCEL_XOUT_H, 14, cb_sense);
 
   // Read magnetometer through I2C
   I2C_SLV0_ADDR_REG i2caddr[1] = {0};
@@ -254,7 +259,7 @@ void loop(void)
   i2cctr[0].I2C_SLV0_LENG = 7;	// Read 7 byte from HXL to ST2
   SPI_Mem_Write(CS_IMU_Pin, I2C_SLV0_CTRL, 1, (uint8_t*)i2cctr);	// expect 0x87(135)
 
-  SPI_Mem_Read(CS_IMU_Pin, EXT_SENS_DATA, cb_mag_sense, 7);
+  SPI_Mem_Read(CS_IMU_Pin, EXT_SENS_DATA, 7, cb_mag_sense);
   /*
   if(!flag){
     flag = true;
